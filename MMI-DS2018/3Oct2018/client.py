@@ -1,6 +1,21 @@
 import socket
 import threading
 import sys
+import chat_protobuf_pb2
+
+class ClientMessage:
+    def encode(self,to,fr,msg):
+        my_message = chat_protobuf_pb2.Message()
+        my_message.fr = fr
+        my_message.to = 0 #temporary
+        my_message.message = msg 
+        to_send = my_message.SerializeToString()
+        return to_send
+
+    def decode(self,buf):
+        my_Message = chat_protobuf_pb2.Message()
+        my_Message.ParseFromString(buf)
+        return my_Message.message
 
 class Client():
     BUF_SIZE = 1024
@@ -8,13 +23,19 @@ class Client():
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_addr = server_addr 
         self.socket.connect(self.server_addr)
+        server_given_id = self.socket.recv(self.BUF_SIZE)
+        self.client_id = int(server_given_id.decode('utf-8'))
+        print('My user id: {}'.format(self.client_id))
     
     def send(self, msg):
-        self.socket.send(msg.encode())
+        client_message = ClientMessage()
+        client_id = self.client_id
+        self.socket.send(client_message.encode(0,client_id,msg))
     
     def recv(self):
         data = self.socket.recv(self.BUF_SIZE)
-        return data.decode('utf-8')
+        client_message = ClientMessage()
+        return client_message.decode(data)
 
 if __name__ == '__main__':
     server_addr = (sys.argv[1], int(sys.argv[2]))
@@ -22,10 +43,10 @@ if __name__ == '__main__':
     client = Client(server_addr)
     while True:
         # Send data
-        message = input('>> ')
+        message = input('>>')
         client.send(message)
         msg = client.recv()
-        if msg == '/quit':
+        if msg  == '/quit':
             print('Disconnected')
             break
         print(msg)
