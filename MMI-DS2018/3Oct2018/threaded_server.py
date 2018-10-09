@@ -1,16 +1,17 @@
 import socket
 from threading import Lock, Thread
 import chat_protobuf_pb2
+import handshake_pb2
 
 number_users = 0
-users_id = 0
+users_id = set()
 lock = Lock()
 
 class ServerMessage:
     def decode(self,buf):
         my_Message = chat_protobuf_pb2.Message()
         my_Message.ParseFromString(buf)
-        print('to:{},from:{},message:{}'.format(my_Message.to,my_Message.fr,my_Message.message))
+        ##print('to:{},from:{},message:{}'.format(my_Message.to,my_Message.fr,my_Message.message))
         return (my_Message.message,my_Message.fr)
     
     def encode(self,to,fr,msg):
@@ -21,6 +22,21 @@ class ServerMessage:
         to_send = my_message.SerializeToString()
         return to_send
 
+class ServerHandshake:
+    def encode(self,client_id,error):
+        print('Handshake response for id {}: error = {}'.format(client_id,error))
+        handshake = handshake_pb2.Handshake()
+        handshake.id = client_id
+        handshake.error = error
+        to_send = handshake.SerializeToString()
+        return to_send
+
+    def decode(self,buf):
+        handshake = handshake_pb2.Handshake()
+        handshake.ParseFromString(buf)
+        return handshake.id
+
+
 class ClientThread(Thread):
     BUF_SIZE = 1024
     def __init__(self, ip, port, socket):
@@ -30,15 +46,22 @@ class ClientThread(Thread):
         self.port = port
         self.socket = socket
         global number_users
-        global users_id
         lock.acquire()
         number_users+= 1
-        users_id+=1
         lock.release()
-        print('Connected client id: {}'.format(users_id))
-        self.socket.send(str(users_id).encode())  
-
+        buf = self.socket.recv(self.BUF_SIZE)
+        server_handshake = ServerHandshake()
+        global users_id
+        lock.acquire()
+        if server_handshake.decode(buf) in users_id:
+            self.socket.send(server_handshake.encode(server_handshake.decode(buf), True))
+            self.socket.close()
+        else:
+            users_id.add(server_handshake.decode(buf))
+            self.socket.send(server_handshake.encode(server_handshake.decode(buf), False))
+        lock.release()
     
+
     def run(self):
         client_message = ServerMessage()
         while True:
@@ -52,6 +75,10 @@ class ClientThread(Thread):
                     global number_users
                     lock.acquire()
                     number_users-= 1
+                    lock.release() 
+                    global users_id
+                    lock.acquire()
+                    users_id.remove(decoded_fr)
                     lock.release() 
                     break
                 self.socket.send(client_message.encode(decoded_fr,0,buf))
