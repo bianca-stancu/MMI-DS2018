@@ -28,17 +28,17 @@ class ClientThread(threading.Thread):
             
 
     def handshake(self):
-        global clients
+        global 
         msg = protocol_pb2.Peer(fr_ip=my_address[0], fr_port = my_address[1],to_ip=self.ip, to_port= self.port)
         self.send(msg)
         data = self.socket.recv(self.BUF_SIZE)
         msg.ParseFromString(data)
         print("Added peer")
-        self.num = len(clients)
-        clients.append(self)
+        self.num = len(peers)
+        peers.append(self)
     
     def wait_for_handshake(self):
-        global clients
+        global peers
         buf = self.socket.recv(self.BUF_SIZE)
         msg = protocol_pb2.Peer()
         msg.ParseFromString(buf)
@@ -47,11 +47,11 @@ class ClientThread(threading.Thread):
         self.socket.send(handshake_msg.SerializeToString())
         self.ip = msg.fr_ip
         self.port = msg.fr_port
-        self.num = len(clients)
-        clients.append(self)
+        self.num = len(peers)
+        peers.append(self)
 
     def run(self):
-        global clients
+        global peers
         while self.alive:
             try:
                 msg = self.recv_msg()
@@ -64,7 +64,6 @@ class ClientThread(threading.Thread):
                     if msg.HasField("uuid_ack"):
                         acked.add(msg.uuid_ack)
                         acked.add(msg.uuid)
-                        ##print('got an ack')
                     if msg.to == my_name:
                         if msg.HasField("msg"):
                             print("From {}: {}".format(msg.fr,msg.msg))
@@ -74,20 +73,18 @@ class ClientThread(threading.Thread):
                         self.broadcast(msg)
             except Exception as e:
                 pass
-                ##print(e)
     
     def broadcast(self, msg):
-        ##print('broadcasting to {} clients'.format(len(clients)))
-        for i in range(len(clients)):
+        for i in range(len(peers)):
             if i == self.num and msg.HasField('msg'):
                 continue
-            clients[i].send(msg)
+            peers[i].send(msg)
 
     def close_client(self):
         print("Closed connection with: {}:{}".format(self.ip,self.port))
-        global clients
+        global peers
         self.socket.close()
-        del clients[self.num]
+        del peers[self.num]
         self.alive = False
 
 class ServerThread(threading.Thread):
@@ -111,7 +108,6 @@ class ServerThread(threading.Thread):
                 client_thread.start()
             except:
                 pass
-                ##print("Error in server!")
     
     def close_server(self):
         self.alive = False
@@ -127,10 +123,8 @@ class ResendMessages(threading.Thread):
     def run(self):
         while True:
             for i in (set(str(s) for s in uuids.keys()) - acked):
-                ##print("UUID of message to resend:"+i)
                 if (datetime.datetime.now()-uuids[i][0]).total_seconds() >= 5:
-                    ##print("Attempt to resend message to {}".format(uuids[i][1].to))
-                    for client in clients:
+                    for client in peers:
                         p2pmsg = uuids[i][1]
                         client.send(p2pmsg)
             time.sleep(5)
@@ -143,7 +137,7 @@ if __name__ == '__main__':
     if len(sys.argv) != 4:
         print('Usage: {} <ip> <port> <display_name>'.format(sys.argv[0]))
         sys.exit(1)
-    clients = []
+    peers = []
     uuids = {}
     acked = set()
     server_thread = ServerThread(sys.argv[1], int(sys.argv[2]))
@@ -158,7 +152,7 @@ if __name__ == '__main__':
     while True:
         cmd = input()
         if cmd == '/nusers':
-            print('Users: {}'.format(len(clients)))
+            print('Users: {}'.format(len(peers)))
         elif cmd == "help":
                 showHelp()
         elif cmd == "exit":
@@ -188,8 +182,8 @@ if __name__ == '__main__':
                     uuidstr = str(uuid.uuid4())
                     msg = protocol_pb2.P2PMessage(fr = my_name,to=to_name, msg=message, uuid=uuidstr)
                     uuids[msg.uuid] = (datetime.datetime.now(),msg)
-                    for i in range(len(clients)):
-                        clients[i].send(msg)
+                    for i in range(len(peers)):
+                        peers[i].send(msg)
                 except Exception as e:
                     print("Sorry, your request could not be processed") 
                     print(e)
@@ -198,11 +192,11 @@ if __name__ == '__main__':
                     address_ip = commands[1]
                     address_port = int(commands[2])
                     found = False
-                    for i in range(len(clients)):
-                      if clients[i].ip == address_ip and clients[i].port == address_port:
+                    for i in range(len(peers)):
+                      if peers[i].ip == address_ip and peers[i].port == address_port:
                             msg = protocol_pb2.P2PMessage(fr = "",to="", msg="", uuid="")
-                            clients[i].send(msg)
-                            clients[i].close_client()
+                            peers[i].send(msg)
+                            peers[i].close_client()
                             found = True
                     if not found:
                         print("Sorry, this client is not in your list, cannot delete it!")
