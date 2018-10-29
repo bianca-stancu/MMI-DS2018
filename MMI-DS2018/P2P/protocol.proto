@@ -1,0 +1,21 @@
+syntax = "proto2";
+
+package tutorial;
+
+message Peer {
+  required string fr_ip = 1;
+  required int32 fr_port = 2;
+  required string to_ip = 3;
+  required int32 to_port = 4;
+}
+
+message P2PMessage{
+  required string fr = 1;
+  required string to = 2;
+  required string uuid = 3;
+
+  oneof type_message {
+    string msg = 4;
+    string uuid_ack=5;
+  }
+}
