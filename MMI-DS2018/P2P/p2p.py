@@ -7,7 +7,7 @@ import datetime
 import time
 
 
-class ClientThread(threading.Thread):
+class PeerThread(threading.Thread):
     BUF_SIZE = 1024
 
     def __init__(self, socket,ip,port):
@@ -28,7 +28,7 @@ class ClientThread(threading.Thread):
             
 
     def handshake(self):
-        global 
+        global peers 
         msg = protocol_pb2.Peer(fr_ip=my_address[0], fr_port = my_address[1],to_ip=self.ip, to_port= self.port)
         self.send(msg)
         data = self.socket.recv(self.BUF_SIZE)
@@ -87,7 +87,7 @@ class ClientThread(threading.Thread):
         del peers[self.num]
         self.alive = False
 
-class ServerThread(threading.Thread):
+class ListenerThread(threading.Thread):
     def __init__(self, ip, port):
         threading.Thread.__init__(self)
         self.srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -102,7 +102,7 @@ class ServerThread(threading.Thread):
                 conn,address= self.srv.accept()
                 client_ip = address[0]
                 client_port = address[1]
-                client_thread = ClientThread(conn,client_ip,client_port)
+                client_thread = PeerThread(conn,client_ip,client_port)
                 client_thread.wait_for_handshake()
                 client_thread.daemon = True
                 client_thread.start()
@@ -117,7 +117,9 @@ def showHelp():
     print("Here's a list of commands you can do:")
     print("To add another client as a peer: add <ip> <port>")
     print("To close a connection with a peer and remove it: close <ip> <port>")
-    print("To send a message to someone: send <ip> <port>")
+    print("To send a message to someone: send <name>")
+    print("To close the program: exit")
+    print("To show all your peers: show")
 
 class ResendMessages(threading.Thread):
     def run(self):
@@ -140,7 +142,7 @@ if __name__ == '__main__':
     peers = []
     uuids = {}
     acked = set()
-    server_thread = ServerThread(sys.argv[1], int(sys.argv[2]))
+    server_thread = ListenerThread(sys.argv[1], int(sys.argv[2]))
     my_address=(sys.argv[1],int(sys.argv[2]))
     my_name = sys.argv[3]
     server_thread.daemon = True
@@ -158,6 +160,9 @@ if __name__ == '__main__':
         elif cmd == "exit":
             print("Finishing program...")
             break
+        elif cmd == "show":
+            for peer in peers:
+                print("{}:{}".format(peer.ip,peer.port))
         else:
             commands = cmd.split()
             if commands[0] == "add":
@@ -168,7 +173,7 @@ if __name__ == '__main__':
                     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     sock.connect((ip, port))
 
-                    c = ClientThread(sock, ip, port)
+                    c = PeerThread(sock, ip, port)
                     c.handshake()
                     c.daemon = True
                     c.start()
